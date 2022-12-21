@@ -1,0 +1,422 @@
+/**
+ * JavaCC template file created by SF JavaCC plugin 1.5.28+ wizard for JavaCC 1.5.0+
+ */options{
+  STATIC = true;
+  DEBUG_PARSER = true;
+}PARSER_BEGIN(MyLang)
+import java.util.Scanner;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+public class MyLang{  public static void main(String args []) throws ParseException, TokenMgrError, NumberFormatException     {
+    try {
+      MyLang parser = null;
+      if (args.length > 0)
+      parser = new MyLang(new FileInputStream(args[0]));
+      else
+      {
+             System.out.print("Program filename: ");
+             Scanner in = new Scanner(System.in);
+             parser = new MyLang(new FileInputStream(in.next()));
+       }  
+      Statement stm = MyLang.Start();
+    //  System.out.print(stm);
+      stm.evaluate(new Env());
+    }
+    catch (FileNotFoundException e)
+    {
+           System.out.println(e.getMessage());
+    }    
+    catch (RuntimeException e)
+    {
+           System.out.println(e.getMessage());
+    }
+            System.exit(0);
+  }}PARSER_END(MyLang)SKIP :{  " "| "\r"| "\t"| "\n"
+| "\r\n"}TOKEN : /* OPERATORS */{  < PLUS : "+" >| < MINUS : "-" >| < MULTIPLY : "*" >| < DIVIDE : "/" >}TOKEN :{  < RETURN : "return" >
+| < IF  : "if" >
+| < ELSE  : "else" >
+| < WHILE  : "while" >
+| < FUNC  : "func" >
+| < VAR  : "var" >
+| < TRUE  : "true" >
+| < FALSE  : "false" >
+| < READ: "read" >
+| < WRITE: "write">
+| < BREAK: "break">}
+
+TOKEN :
+{ < LT : "<" >
+| < GT : ">" >
+| < EQ : "==" >
+| < NE : "!=" >
+| < NOT : "!" >
+| < LP : "(" >
+| < RP : ")" >
+| < LCB : "{" >
+| < RCB : "}" >
+| < LSP : "[" >
+| < RSP : "]" >
+| < AND : "&&" >
+| < OR: "||" >
+| < DOT: ".">
+| < LENGTH: "len" >
+| < GET: "get" >
+| < ADD: "add">
+| < INTEGER : ("-")? (<DIGIT>)+ >
+| < OPERATOR : <PLUS> | <MINUS> >
+}
+
+TOKEN:
+{
+   <ID  : < INITIAL > (< SUBSEQUENT >)* >
+  |< #DIGIT : [ "0"-"9" ] >
+  |<#INITIAL: [ "a" - "z", "!", "$", "%", "*", "/", ":", "<", ">", "?", "^", "_", "~"] >
+  |<#SUBSEQUENT : < INITIAL > | < DIGIT > | "-" | "@" >
+}
+
+//start
+
+Statement Start():
+{ Statement stm = new EmptyStm();}
+{
+  (stm = multiStatement())
+  < EOF >
+  {return stm;}
+}
+
+Declaration decParse():
+{Token id; Expression exp;}
+{
+  < VAR > id = < ID > "=" exp = expParse() ";"
+  {return new Declaration(id.image, exp);} 
+}
+
+Expression varParse():
+{Token id;}
+{  (id = < ID >)
+  { return new Variable(id.image);}}
+
+Expression readParse():
+{Expression exp;}
+{
+  < READ >
+  {exp = new Read(); }
+  {return exp;}
+}
+
+Write writeParse():
+{Expression exp;}
+{
+  < WRITE > exp = expParse() ";"
+  {return new Write(exp);}
+}
+
+Parameter paramParse():
+{Expression exp;}
+{
+  (exp = expParse())
+  {return new Parameter(exp);}}
+
+Parameter multiParamParse():
+{Parameter first = null; Parameter last = null; Parameter next = null;}
+{
+  [ last = paramParse() ("," next = paramParse())*
+  {
+    if(first == null)
+    	first = last;
+    last.nextParam = next;
+    last = next; 
+  }]
+
+  {return first;}}
+
+FunctionCallExpression funcCallExpParse():
+{ Parameter p = null; Token id;}
+{
+  (id = <ID> < LP > p = multiParamParse() < RP >)
+  {return new FunctionCallExpression(id.image, p);} 
+}
+
+Expression listParse():
+{ListExp listExp = new ListExp(); Expression exp1 = null; Expression exp2 = null;}
+{
+  <LSP>
+  (exp2 = expParse() {listExp.addExp(exp2);})*
+  {exp1 = listExp;}
+  <RSP>
+  {return exp1;}
+}
+
+Expression primaryExpParse():
+{ Expression exp;}
+{
+  (
+  exp = literalParse()
+	|LOOKAHEAD(< ID > < LP >) exp = funcCallExpParse() 
+	| exp = varParse()
+	| exp = listParse()
+	| < LP > exp = expParse() < RP >
+	| exp = readParse()  )
+  { return exp; }
+}
+
+Expression postfixExpParse():
+{Expression exp, exp2;}
+{  
+  exp = primaryExpParse()
+(
+  //LOOKAHEAD( < DOT > ) (< DOT > < ADD > < LP > exp2 = primaryExpParse() < RP >) {exp = new ListAdd(exp2); }
+ //|LOOKAHEAD(< DOT > < ID > < LP >) (< DOT > < GET > < LP > exp2 = intLiteralParse() < RP >) {exp = new ListIndex(exp); }
+ LOOKAHEAD(< DOT > ) (< DOT > < LENGTH >) {exp = new ListLength(exp);} 
+)*
+  {return exp;}
+}
+
+Expression notExpParse():
+{Expression exp;}
+{
+  (< NOT >)+ exp = postfixExpParse() {exp = new Not(exp);}
+  {return exp;}
+}
+
+Expression prefixExpParse():
+{ Expression exp = null;}
+{
+  (
+    exp = notExpParse()
+  | exp = postfixExpParse()  )
+  {return exp;}
+}
+
+Expression multiplicativeExpParse():
+{Expression left, right;}
+{
+  left = prefixExpParse()
+  (
+    (< MULTIPLY > right = prefixExpParse()) { left = new Multiply(left, right);}
+  | (< DIVIDE > right = prefixExpParse()) { left = new Divide(left, right);}
+  )*
+  {return left;}
+}
+
+Expression additiveExpParse():
+{ Expression left, right;}
+{
+  left = multiplicativeExpParse()
+  (
+    (< PLUS > right = multiplicativeExpParse()) { left = new Add(left, right);}
+  | (< MINUS > right = multiplicativeExpParse()) { left = new Subtract(left, right);}
+  )*
+
+  {return left;}
+}
+
+
+Expression comparisonExpsParse():
+{Expression left, right;}
+{
+  left = additiveExpParse()
+  (
+    (< LT > right = additiveExpParse()) { left = new LessThan(left, right);}
+  | (< GT > right = additiveExpParse()) { left = new GreaterThan(left, right);}
+  | (< EQ > right = additiveExpParse()) { left = new Equal(left, right);}
+  | (< NE > right = additiveExpParse()) { left = new NotEqual(left, right);}    )*
+  { return left;} 
+}
+
+Expression andExpParse():
+{Expression left, right;}
+{
+  left = comparisonExpsParse()
+  (
+    (< AND > right = comparisonExpsParse()) { left = new And(left, right);}
+  )*
+  {return left;}
+}
+
+Expression orExpParse():
+{Expression left, right;}
+{
+  left = andExpParse()
+  (
+    (< OR > right = andExpParse()) { left = new Or(left, right);}  )*
+  {return left;}
+}
+
+
+Expression expParse():
+{Expression exp;}
+{
+  ( exp = orExpParse()
+)
+  {return exp; }
+}
+
+Assign assignParse():
+{Token id; Expression exp;}
+{
+  id = <ID> "=" exp = expParse() ";"
+  {return new Assign(id.image, exp);}
+}
+
+Conditional conditionParse():
+{ Expression cond = null;
+Statement thenStm = new EmptyStm();
+Statement elseStm = new EmptyStm();}
+{
+  (
+    < IF > < LP > cond = expParse() < RP > < LCB >
+    thenStm = multiStatement()
+    < RCB > [ < ELSE >
+    < LCB >
+    elseStm = multiStatement()
+    < RCB >]  )
+
+  { return new Conditional(cond, thenStm, elseStm); }
+    
+}
+
+WhileLoop whileLoopParse():
+{ Expression cond = null; Statement stm = new EmptyStm();}
+{
+  (
+    < WHILE > < LP > cond = expParse() <RP> <LCB>
+    stm = multiStatement()
+    <RCB>  )
+
+  {return new WhileLoop(cond, stm);}
+    
+}
+
+FormalParameter formalParamParse():
+{Token id = null; }
+{
+  id = < ID >
+  {return new FormalParameter(id.image);}
+}
+
+FormalParameter multiFormalParam():
+{ FormalParameter first = null; FormalParameter last = null; FormalParameter next = null;}
+{
+  [ last = formalParamParse() ("," next = formalParamParse())* {
+    	if(first == null)
+    		first = last;
+    	last.next = next;
+    	last = next;
+    }]
+
+    { return first; }
+}
+
+FunctionDeclaration funcDecParse():
+{ Token id; FormalParameter fp; Statement stm; }
+{
+  <FUNC> id = < ID > < LP > fp = multiFormalParam() <RP><LCB>
+  stm = multiStatement()
+  <RCB>
+
+  { return new FunctionDeclaration(id.image, fp, stm);}
+    
+}
+
+Return returnParse():
+{ Expression exp;}
+{
+  < RETURN > exp = expParse() ";"
+
+  {return new Return(exp);}
+}
+
+//doesn't return anything
+ListAdd listAddParse():
+{Expression exp, exp2;}
+{
+  exp = primaryExpParse()
+  (
+    < DOT > < ADD > < LP > exp2 = intLiteralParse() < RP > ";" //{ exp = new ListAdd(exp2);}
+  )
+  {return new ListAdd(exp2);}
+}
+
+AddtoList addtoListParse():
+{Expression list, exp;}
+{
+(
+  <ADD><LP> list = listParse() "," exp = intLiteralParse() < RP > ";"
+)
+{return new AddtoList(list, exp);}
+}
+
+FunctionCallStm funcCallStmParse():
+{ Parameter p = null; Token id; }
+{
+  (
+    id = < ID > < LP > p = multiParamParse() < RP > ";"  )
+  { return new FunctionCallStm(id.image, p);}
+}
+
+Statement statementParse():
+{ Statement stm = null;}
+{
+  (
+    stm = decParse()
+  | LOOKAHEAD(< ID > < LP >) stm = funcCallStmParse()
+  | LOOKAHEAD(< ID > < "=" >)stm = assignParse()
+  | stm = listAddParse()
+  | stm = addtoListParse()
+  | stm = conditionParse()
+  | stm = whileLoopParse()
+  | stm = funcDecParse()
+  | stm = returnParse()
+  | stm = writeParse()
+  )
+
+  {return stm;}
+}
+
+Statement multiStatement():
+{ Statement first = new EmptyStm(); Statement last = first; Statement next = null;}
+{
+  (next = statementParse() {
+    last.next = next;
+    last = next;
+  })*
+  {return first;}
+}
+
+StrLiteral strLiteralParse():
+{Token t;}
+{
+  "\""t = < ID >"\"" { return new StrLiteral(t.image); }
+}
+
+BoolLiteral boolLiteralParse():
+{ Token t;}
+{
+  t = < TRUE > { return new BoolLiteral(true);}
+| t = < FALSE > { return new BoolLiteral(false);}
+}
+
+
+IntLiteral digit():
+{ Token t;}
+{
+  t = < INTEGER > { return new IntLiteral(Integer.parseInt(t.image));}
+}
+
+Expression intLiteralParse():
+{Expression exp = null;}
+{
+  < MINUS > exp = digit() {return new UnaryExp(exp); }
+| exp = digit() { return exp;}
+}
+
+Expression literalParse():
+{ Expression exp;}
+{
+  (exp = boolLiteralParse()
+| exp = strLiteralParse()
+| exp = intLiteralParse()  )
+  
+  {return exp;}
+}
