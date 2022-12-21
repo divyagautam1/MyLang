@@ -1,0 +1,12 @@
+func inlist(val){
+	var max = read;
+	while(val > 1){
+		var number = read;
+		if(max < number){
+			max = number;
+		}
+		val = val - 1;
+	}
+	return max;
+}
+write(inlist(read));
